@@ -81,19 +81,31 @@ input[type=range]{width:100%;accent-color:var(--good);margin-top:6px}
 .camwrap.bad{will-change:box-shadow}
 .loading-screen{position:fixed;inset:0;z-index:50;background:radial-gradient(1200px 700px at 15% -10%,#101923 0%,var(--bg) 55%);display:flex;align-items:center;justify-content:center;transition:opacity .5s ease,visibility .5s}
 .loading-screen.hide{opacity:0;visibility:hidden;pointer-events:none}
-.loading-inner{display:flex;flex-direction:column;align-items:center;gap:14px}
-.loading-ring{width:52px;height:52px;border-radius:50%;border:3px solid var(--line2);border-top-color:var(--good);animation:spin .8s linear infinite;will-change:transform}
-@keyframes spin{to{transform:rotate(360deg)}}
-.loading-text{font-family:var(--head);font-weight:700;font-size:16px;color:var(--text)}
+.loading-inner{display:flex;flex-direction:column;align-items:center;gap:12px}
+.loading-logo{position:relative;width:64px;height:64px;display:flex;align-items:center;justify-content:center}
+.loading-dot{width:16px;height:16px;border-radius:50%;background:var(--good);box-shadow:0 0 18px 3px rgba(79,214,196,.55);z-index:2}
+.pulse-ring{position:absolute;inset:0;border-radius:50%;border:2px solid var(--good);opacity:0;animation:pulseRing 2s ease-out infinite;will-change:transform,opacity}
+.pulse-ring.delay{animation-delay:1s}
+@keyframes pulseRing{0%{transform:scale(.3);opacity:.75}100%{transform:scale(1.7);opacity:0}}
+.loading-text{font-family:var(--head);font-weight:700;font-size:16px;color:var(--text);letter-spacing:.3px}
 .loading-sub{font-family:var(--mono);font-size:12px;color:var(--dim);min-height:16px}
+.loading-bar{width:170px;height:3px;border-radius:3px;background:var(--line2);overflow:hidden;margin-top:2px}
+.loading-bar-fill{height:100%;width:6%;background:linear-gradient(90deg,var(--good),#8be9dc);border-radius:3px;transition:width .6s cubic-bezier(.4,0,.2,1)}
+.wrap{opacity:0;transform:translateY(8px);transition:opacity .6s ease,transform .6s ease}
+.wrap.loaded{opacity:1;transform:translateY(0)}
 </style>
 </head>
 <body>
 <div id="loadingScreen" class="loading-screen">
   <div class="loading-inner">
-    <div class="loading-ring"></div>
+    <div class="loading-logo">
+      <span class="pulse-ring"></span>
+      <span class="pulse-ring delay"></span>
+      <div class="loading-dot"></div>
+    </div>
     <div class="loading-text">SmartPosture</div>
     <div class="loading-sub" id="loadingSub">Đang tải mô hình AI…</div>
+    <div class="loading-bar"><div class="loading-bar-fill" id="loadingBarFill"></div></div>
   </div>
 </div>
 <div class="wrap">
@@ -204,12 +216,19 @@ const gaugeLabel = document.getElementById('gaugeLabel');
 const gaugeSub = document.getElementById('gaugeSub');
 const loadingScreen = document.getElementById('loadingScreen');
 const loadingSub = document.getElementById('loadingSub');
+const loadingBarFill = document.getElementById('loadingBarFill');
+const wrapEl = document.querySelector('.wrap');
 let loadingHidden = false;
+loadingBarFill.style.width = '30%'; // script MediaPipe đã tải xong tới đây
 function hideLoading(){
   if(loadingHidden) return;
   loadingHidden = true;
-  loadingScreen.classList.add('hide');
-  setTimeout(()=>loadingScreen.remove(), 600);
+  loadingBarFill.style.width = '100%';
+  setTimeout(()=>{
+    loadingScreen.classList.add('hide');
+    wrapEl.classList.add('loaded');
+    setTimeout(()=>loadingScreen.remove(), 600);
+  }, 220);
 }
 setTimeout(hideLoading, 12000); // an toàn: tự ẩn dù có lỗi mạng/model
 needleGroup.style.transformOrigin = '110px 120px';
@@ -463,6 +482,7 @@ let lastSendTime = 0;
 const SEND_INTERVAL_MS = isMobileDevice ? 90 : 60; // ~11fps di động / ~16fps desktop — đủ mượt, nhẹ CPU/pin
 async function startCamera(){
   loadingSub.textContent = 'Đang khởi động camera…';
+  loadingBarFill.style.width = '65%';
   camera = new Camera(videoEl, {
     onFrame: async () => {
       const t = performance.now();
