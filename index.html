@@ -77,9 +77,25 @@ input[type=range]{width:100%;accent-color:var(--good);margin-top:6px}
 .gauge-label.warn{color:var(--warn)}
 .gauge-label.bad{color:var(--bad)}
 .gauge-sub{font-family:var(--mono);font-size:11.5px;color:var(--dim);margin-top:2px}
+#needleGroup{will-change:transform}
+.camwrap.bad{will-change:box-shadow}
+.loading-screen{position:fixed;inset:0;z-index:50;background:radial-gradient(1200px 700px at 15% -10%,#101923 0%,var(--bg) 55%);display:flex;align-items:center;justify-content:center;transition:opacity .5s ease,visibility .5s}
+.loading-screen.hide{opacity:0;visibility:hidden;pointer-events:none}
+.loading-inner{display:flex;flex-direction:column;align-items:center;gap:14px}
+.loading-ring{width:52px;height:52px;border-radius:50%;border:3px solid var(--line2);border-top-color:var(--good);animation:spin .8s linear infinite;will-change:transform}
+@keyframes spin{to{transform:rotate(360deg)}}
+.loading-text{font-family:var(--head);font-weight:700;font-size:16px;color:var(--text)}
+.loading-sub{font-family:var(--mono);font-size:12px;color:var(--dim);min-height:16px}
 </style>
 </head>
 <body>
+<div id="loadingScreen" class="loading-screen">
+  <div class="loading-inner">
+    <div class="loading-ring"></div>
+    <div class="loading-text">SmartPosture</div>
+    <div class="loading-sub" id="loadingSub">Đang tải mô hình AI…</div>
+  </div>
+</div>
 <div class="wrap">
 <header>
   <div>
@@ -186,6 +202,16 @@ const TREND_MAX_POINTS = 60;
 const needleGroup = document.getElementById('needleGroup');
 const gaugeLabel = document.getElementById('gaugeLabel');
 const gaugeSub = document.getElementById('gaugeSub');
+const loadingScreen = document.getElementById('loadingScreen');
+const loadingSub = document.getElementById('loadingSub');
+let loadingHidden = false;
+function hideLoading(){
+  if(loadingHidden) return;
+  loadingHidden = true;
+  loadingScreen.classList.add('hide');
+  setTimeout(()=>loadingScreen.remove(), 600);
+}
+setTimeout(hideLoading, 12000); // an toàn: tự ẩn dù có lỗi mạng/model
 needleGroup.style.transformOrigin = '110px 120px';
 needleGroup.style.transition = 'transform .4s cubic-bezier(.4,0,.2,1)';
 function setGauge(score, level, text){
@@ -299,6 +325,7 @@ function metricsFrom(lm){
 }
 
 function onResults(results){
+  hideLoading();
   canvasEl.width = videoEl.videoWidth || 640;
   canvasEl.height = videoEl.videoHeight || 480;
   ctx.clearRect(0,0,canvasEl.width,canvasEl.height);
@@ -427,18 +454,27 @@ function onResults(results){
 }
 
 const pose = new Pose({locateFile: f => `https://cdn.jsdelivr.net/npm/@mediapipe/pose/${f}`});
-pose.setOptions({modelComplexity:1, smoothLandmarks:true, minDetectionConfidence:0.5, minTrackingConfidence:0.5});
+const isMobileDevice = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent) || window.innerWidth < 820;
+pose.setOptions({modelComplexity:isMobileDevice?0:1, smoothLandmarks:true, minDetectionConfidence:0.5, minTrackingConfidence:0.5});
 pose.onResults(onResults);
 
 let camera = null;
+let lastSendTime = 0;
+const SEND_INTERVAL_MS = isMobileDevice ? 90 : 60; // ~11fps di động / ~16fps desktop — đủ mượt, nhẹ CPU/pin
 async function startCamera(){
+  loadingSub.textContent = 'Đang khởi động camera…';
   camera = new Camera(videoEl, {
-    onFrame: async () => { await pose.send({image: videoEl}); },
+    onFrame: async () => {
+      const t = performance.now();
+      if(t - lastSendTime < SEND_INTERVAL_MS) return;
+      lastSendTime = t;
+      await pose.send({image: videoEl});
+    },
     width: 640, height: 480
   });
   await camera.start();
 }
-startCamera().catch(()=>{ overlayLabel.textContent = 'Không thể truy cập camera'; });
+startCamera().catch(()=>{ overlayLabel.textContent = 'Không thể truy cập camera'; loadingSub.textContent='Lỗi camera — kiểm tra quyền truy cập'; setTimeout(hideLoading,1500); });
 resizeTrendCanvas(); drawTrend();
 
 calibBtn.onclick = () => {
