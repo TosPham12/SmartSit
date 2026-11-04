@@ -108,8 +108,44 @@ input[type=range]{width:100%;accent-color:var(--link);margin-top:8px}
 .loading-sub{font-family:var(--font);font-size:12px;color:var(--dim);min-height:16px}
 .loading-bar{width:170px;height:3px;border-radius:3px;background:var(--line2);overflow:hidden;margin-top:2px}
 .loading-bar-fill{height:100%;width:6%;background:var(--link);border-radius:3px;transition:width .6s cubic-bezier(.4,0,.2,1)}
+.report-section{margin-top:16px}
+.report-section:first-child{margin-top:0}
+.report-h{font-size:11.5px;color:var(--dim);text-transform:uppercase;letter-spacing:.4px;margin-bottom:8px;font-weight:600}
+.report-text{font-size:13.5px;line-height:1.6;color:var(--text)}
+.report-list{margin:8px 0 0;padding-left:18px;font-size:13px;color:var(--dim);line-height:1.7}
+.report-list li{color:var(--text)}
+.report-stats{display:flex;gap:22px;flex-wrap:wrap}
+.report-stat .n{font-size:21px;font-weight:700;letter-spacing:-.3px;font-variant-numeric:tabular-nums}
+.report-stat .l{font-size:11px;color:var(--dim);margin-top:2px}
 .pop{animation:popScale .35s ease}
 @keyframes popScale{0%{transform:scale(1)}35%{transform:scale(1.35)}100%{transform:scale(1)}}
+.modal-backdrop{position:fixed;inset:0;z-index:70;background:rgba(0,0,0,.55);display:none;align-items:center;justify-content:center;padding:20px}
+.modal-backdrop.show{display:flex}
+.modal{background:var(--panel);border:1px solid var(--line2);border-radius:18px;max-width:440px;width:100%;padding:22px 22px 18px;box-shadow:0 24px 60px -20px rgba(0,0,0,.7);max-height:min(90vh,640px);overflow:auto}
+.modal h2{margin-bottom:8px}
+.check-item{display:flex;align-items:flex-start;gap:10px;padding:8px 0;font-size:13.5px;line-height:1.45}
+.check-item input{margin-top:3px;accent-color:var(--link);flex:none}
+.live-checks{display:flex;flex-wrap:wrap;gap:8px;margin:12px 0 4px}
+.live-chip{font-size:11.5px;padding:5px 10px;border-radius:9999px;background:var(--chip-bg);color:var(--dim);border:1px solid var(--line)}
+.live-chip.ok{color:var(--good);border-color:transparent;background:var(--good-dim)}
+.live-chip.bad{color:var(--warn);border-color:transparent;background:var(--warn-dim)}
+.hist-empty{font-size:13px;color:var(--dim);line-height:1.5}
+.hist-compare{font-size:12.5px;color:var(--dim);margin-bottom:10px}
+.hist-delta.up{color:var(--good)}.hist-delta.down{color:var(--bad)}
+.card-head{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:14px}
+.card-head h2{margin:0}
+.btn-xs{padding:7px 12px;font-size:12px;box-shadow:none}
+.camwrap.paused{border-color:var(--link)}
+@media print{
+  .loading-screen,.no-print,header .headerbtns,.btnrow,label.range,.note,.camwrap,.status-banner,.gaugecard,canvas,#trendCanvas,.legend,#tooltipPopup,.modal-backdrop{display:none !important}
+  body{background:#fff;color:#111}
+  .wrap{opacity:1;transform:none;max-width:none;padding:0}
+  .grid{display:block}
+  .card{box-shadow:none;border:1px solid #ddd;break-inside:avoid;background:#fff}
+  #reportCard,#historyCard{display:block !important}
+  .logbox{max-height:none;overflow:visible}
+  th{position:static;background:#f4f4f4;color:#333}
+}
 @media(max-width:480px){
   .wrap{padding:18px 14px 44px}
   h1{font-size:19px}
@@ -159,9 +195,13 @@ input[type=range]{width:100%;accent-color:var(--link);margin-top:8px}
       </div>
       <div class="btnrow">
         <button id="calibBtn" data-i18n="calibBtn">Bắt đầu hiệu chuẩn (5s)</button>
+        <button id="pauseBtn" class="secondary" disabled data-i18n="pauseBtn">Tạm dừng</button>
+        <button id="endBtn" class="secondary" disabled data-i18n="endBtn">Kết thúc phiên</button>
         <button id="resetBtn" class="secondary" data-i18n="resetBtn">Đặt lại</button>
         <button id="exportBtn" class="secondary" disabled data-i18n="exportBtn">Xuất dữ liệu (.csv)</button>
+        <button id="reportBtn" class="secondary" disabled data-i18n="reportBtn">Xem kết quả phiên</button>
       </div>
+      <div class="status-banner" id="calibQuality" style="display:none;margin-top:10px"></div>
       <label class="range"><span data-i18n="threshPrefix">Ngưỡng cảnh báo — hiện tại:</span> <span id="threshLabel">85%</span> <span data-i18n="threshSuffix">so với khung chuẩn</span>
         <input type="range" id="thresh" min="70" max="95" value="85">
       </label>
@@ -196,6 +236,31 @@ input[type=range]{width:100%;accent-color:var(--link);margin-top:8px}
       <div class="rowline"><span class="k"><svg class="micon" viewBox="0 0 24 24" width="15" height="15"><circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="2" fill="none"/><path d="M8 12l3 3 5-6" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg><span data-i18n="lblGoodPct">% thời gian tư thế tốt</span></span><span class="v" id="goodPct">—</span></div>
     </div>
     <div class="card" style="margin-top:14px">
+      <h2 data-i18n="h2Cush">Đệm ghế cảm biến</h2>
+      <div class="btnrow">
+        <button id="cushConnBtn" data-i18n="cushConnect">Kết nối đệm (USB)</button>
+        <button id="cushZeroBtn" class="secondary" disabled data-i18n="cushZero">Đo nền đệm trống (5s)</button>
+      </div>
+      <div class="note" id="cushStatus"></div>
+      <div class="note" id="cushWarn" style="color:var(--bad)"></div>
+      <div id="cushBars" style="display:flex;gap:6px;height:56px;align-items:flex-end;margin:10px 0"></div>
+      <div class="rowline"><span class="k">Tổng tải T</span><span class="v" id="cushT">—</span></div>
+      <div class="rowline"><span class="k">Trái–phải LR</span><span class="v" id="cushLR">—</span></div>
+      <div class="rowline"><span class="k">Trước–sau FB</span><span class="v" id="cushFB">—</span></div>
+    </div>
+    <div class="card" style="margin-top:14px">
+      <h2 data-i18n="h2Rec">Ghi dữ liệu huấn luyện</h2>
+      <label class="range"><span data-i18n="recLabelPrefix">Nhãn tư thế đang ngồi</span>
+        <select id="recLabel" style="width:100%;margin-top:6px;padding:8px;border-radius:8px;background:var(--panel2);color:var(--text);border:1px solid var(--line2);font-family:inherit"></select>
+      </label>
+      <div class="btnrow">
+        <button id="recStartBtn" data-i18n="recStart">Bắt đầu ghi (sau 3s)</button>
+        <button id="recStopBtn" class="secondary" disabled data-i18n="recStop">Dừng ghi</button>
+        <button id="recExportBtn" class="secondary" disabled data-i18n="recExport">Xuất CSV huấn luyện</button>
+      </div>
+      <div class="note" id="recStatus"></div>
+    </div>
+    <div class="card" style="margin-top:14px">
       <h2 data-i18n="h2Trend">Xu hướng tư thế</h2>
       <canvas id="trendCanvas"></canvas>
       <div class="legend">
@@ -203,6 +268,33 @@ input[type=range]{width:100%;accent-color:var(--link);margin-top:8px}
         <span><i class="dot rsi"></i>RSI%</span>
         <span style="color:var(--warn)" data-i18n="legendThresh">┈┈ Ngưỡng cảnh báo</span>
       </div>
+    </div>
+    <div class="card" id="reportCard" style="margin-top:14px;display:none">
+      <div class="card-head">
+        <h2 data-i18n="h2Report">Báo cáo phiên</h2>
+        <button id="printBtn" class="secondary btn-xs no-print" data-i18n="printBtn">In / lưu PDF</button>
+      </div>
+      <div id="reportBody"></div>
+    </div>
+    <div class="card no-print" id="historyCard" style="margin-top:14px">
+      <div class="card-head">
+        <h2 data-i18n="h2History">Lịch sử phiên</h2>
+        <button id="clearHistBtn" class="secondary btn-xs" data-i18n="clearHistBtn">Xóa lịch sử</button>
+      </div>
+      <div class="hist-compare" id="histCompare"></div>
+      <div class="logbox">
+        <table>
+          <thead><tr>
+            <th data-i18n="thDate">Ngày</th>
+            <th data-i18n="repDuration">Thời lượng</th>
+            <th data-i18n="lblGoodPct">% tốt</th>
+            <th data-i18n="thVsPrev">So với phiên trước</th>
+            <th></th>
+          </tr></thead>
+          <tbody id="histBody"></tbody>
+        </table>
+      </div>
+      <div class="hist-empty" id="histEmpty" data-i18n="histEmpty">Chưa có phiên nào được lưu trên máy này.</div>
     </div>
     <div class="card" style="margin-top:14px">
       <h2 data-i18n="h2Log">Nhật ký dữ liệu (mỗi 5 giây)</h2>
@@ -216,6 +308,26 @@ input[type=range]{width:100%;accent-color:var(--link);margin-top:8px}
   </div>
 </div>
 <div id="tooltipPopup" class="tooltip-popup"></div>
+<div id="calibModal" class="modal-backdrop no-print" role="dialog" aria-modal="true">
+  <div class="modal">
+    <h2 data-i18n="calibGuideTitle">Chuẩn bị trước khi hiệu chuẩn</h2>
+    <p class="note" style="margin-top:0" data-i18n="calibGuideLead">Làm theo checklist rồi ngồi ở tư thế bạn cho là chuẩn. Camera sẽ lấy mốc 5 giây.</p>
+    <div class="live-checks">
+      <span class="live-chip" id="chipFace">Mặt</span>
+      <span class="live-chip" id="chipShoulders">Hai vai</span>
+      <span class="live-chip" id="chipEars">Hai tai</span>
+    </div>
+    <div class="note" id="earWarn" style="margin-top:6px;display:none" data-i18n="earWarn">Chưa thấy rõ hai tai — góc cổ/nghiêng đầu sẽ bị loại khỏi cảnh báo (thấp tin cậy).</div>
+    <label class="check-item"><input type="checkbox" id="ckEye"><span data-i18n="ckEye">Camera ngang tầm mắt (không nhìn từ trên xuống)</span></label>
+    <label class="check-item"><input type="checkbox" id="ckLight"><span data-i18n="ckLight">Đủ sáng, khuôn mặt không ngược sáng mạnh</span></label>
+    <label class="check-item"><input type="checkbox" id="ckBody"><span data-i18n="ckBody">Nhìn thấy mặt và cả hai vai trong khung hình</span></label>
+    <label class="check-item"><input type="checkbox" id="ckSit"><span data-i18n="ckSit">Tôi đang ngồi đúng tư thế muốn lấy làm chuẩn</span></label>
+    <div class="btnrow" style="margin-top:14px">
+      <button id="calibStartNow" data-i18n="calibStartNow">Bắt đầu hiệu chuẩn (5s)</button>
+      <button id="calibCancel" class="secondary" data-i18n="calibCancel">Hủy</button>
+    </div>
+  </div>
+</div>
 </div>
 
 <script>
@@ -225,8 +337,14 @@ const ctx = canvasEl.getContext('2d');
 const camwrap = document.getElementById('camwrap');
 const overlayLabel = document.getElementById('overlayLabel');
 const calibBtn = document.getElementById('calibBtn');
+const pauseBtn = document.getElementById('pauseBtn');
+const endBtn = document.getElementById('endBtn');
 const resetBtn = document.getElementById('resetBtn');
 const exportBtn = document.getElementById('exportBtn');
+const reportBtn = document.getElementById('reportBtn');
+const printBtn = document.getElementById('printBtn');
+const reportCard = document.getElementById('reportCard');
+const reportBody = document.getElementById('reportBody');
 const threshInput = document.getElementById('thresh');
 const threshLabel = document.getElementById('threshLabel');
 const statusBanner = document.getElementById('statusBanner');
@@ -273,6 +391,9 @@ themeToggle.onclick = () => applyTheme(document.documentElement.getAttribute('da
 const I18N = {
   subtitle:{vi:'Đồ án Nhập môn Kỹ thuật — theo dõi tư thế qua webcam, không cần nhìn thấy lưng', en:'Intro to Engineering project — webcam posture tracking, no need to see your back'},
   calibBtn:{vi:'Bắt đầu hiệu chuẩn (5s)', en:'Start calibration (5s)'},
+  pauseBtn:{vi:'Tạm dừng', en:'Pause'},
+  resumeBtn:{vi:'Tiếp tục', en:'Resume'},
+  endBtn:{vi:'Kết thúc phiên', en:'End session'},
   resetBtn:{vi:'Đặt lại', en:'Reset'},
   exportBtn:{vi:'Xuất dữ liệu (.csv)', en:'Export data (.csv)'},
   threshPrefix:{vi:'Ngưỡng cảnh báo — hiện tại:', en:'Alert threshold — currently:'},
@@ -295,6 +416,8 @@ const I18N = {
   overlayCountdown:{vi:'Hiệu chuẩn:', en:'Calibrating:'},
   overlayFail:{vi:'Hiệu chuẩn thất bại, thử lại', en:'Calibration failed, try again'},
   overlayDone:{vi:'Đã hiệu chuẩn — đang theo dõi', en:'Calibrated — now monitoring'},
+  overlayPaused:{vi:'Đã tạm dừng — không tính ngồi sai', en:'Paused — standing up is not counted'},
+  overlayEnded:{vi:'Phiên đã kết thúc — xem báo cáo bên dưới', en:'Session ended — see the report below'},
   overlayNoCam:{vi:'Không thể truy cập camera', en:'Cannot access camera'},
   loadingModel:{vi:'Đang tải mô hình AI…', en:'Loading AI model…'},
   loadingCamera:{vi:'Đang khởi động camera…', en:'Starting camera…'},
@@ -303,19 +426,74 @@ const I18N = {
   bannerWarnPrefix:{vi:'Đang lệch:', en:'Deviating:'}, bannerWarnSuffix:{vi:'— theo dõi…', en:'— monitoring…'},
   bannerBadPrefix:{vi:'Cảnh báo kéo dài:', en:'Sustained alert:'},
   bannerWaiting:{vi:'Đang chờ hiệu chuẩn…', en:'Waiting for calibration…'},
+  bannerEnded:{vi:'Phiên theo dõi đã kết thúc', en:'Monitoring session ended'},
+  bannerPaused:{vi:'Phiên đang tạm dừng — đứng dậy không bị tính là ngồi sai', en:'Session paused — standing up is not counted as bad posture'},
   gaugeGood:{vi:'Tốt', en:'Good'}, gaugeWarn:{vi:'Cảnh báo', en:'Warning'}, gaugeBad:{vi:'Xấu', en:'Bad'},
   gaugeSubGood:{vi:'Tiếp tục duy trì tư thế này', en:'Keep maintaining this posture'},
   gaugeSubWaiting:{vi:'Đang theo dõi…', en:'Monitoring…'},
   gaugeSubIdle:{vi:'Hiệu chuẩn để bắt đầu theo dõi', en:'Calibrate to start monitoring'},
+  gaugeSubEnded:{vi:'Nhấn hiệu chuẩn để bắt đầu phiên mới', en:'Calibrate to start a new session'},
+  gaugePaused:{vi:'Tạm dừng', en:'Paused'},
+  gaugeSubPaused:{vi:'Nhấn Tiếp tục khi ngồi lại', en:'Press Resume when you sit back down'},
   lowConfidence:{vi:'—/thấp tin cậy', en:'—/low confidence'},
   themeTitle:{vi:'Đổi giao diện sáng/tối', en:'Toggle light/dark theme'},
+  reportBtn:{vi:'Xem kết quả phiên', en:'View session report'},
+  h2Report:{vi:'Báo cáo phiên', en:'Session report'},
+  repDuration:{vi:'Thời lượng phiên', en:'Session duration'},
+  repLogHeader:{vi:'Nhật ký hệ thống (mỗi 5 giây)', en:'System log (every 5s)'},
+  repLogEmpty:{vi:'Chưa có dòng log nào trong phiên này.', en:'No log rows in this session yet.'},
+  reportNoData:{vi:'Chưa đủ dữ liệu — hãy hiệu chuẩn và theo dõi ít nhất khoảng 15-20 giây trước khi xem báo cáo.', en:'Not enough data yet — calibrate and monitor for at least 15-20 seconds before viewing the report.'},
+  repOverview:{vi:'Tổng quan', en:'Overview'},
+  repGoodPct:{vi:'% thời gian tốt', en:'% good time'},
+  repAvgFhi:{vi:'FHI% trung bình', en:'Avg FHI%'},
+  repAvgRsi:{vi:'RSI% trung bình', en:'Avg RSI%'},
+  repAlerts:{vi:'Lần cảnh báo', en:'Alerts'},
+  repAssessGood:{vi:'Tư thế của bạn khá tốt trong suốt phiên theo dõi này — tiếp tục duy trì nhé.', en:'Your posture was quite good throughout this session — keep it up.'},
+  repAssessMed:{vi:'Tư thế ở mức trung bình trong phiên này — có những khoảng thời gian cần chú ý điều chỉnh thêm.', en:'Posture was average this session — there were periods that need more attention.'},
+  repAssessBad:{vi:'Tư thế lệch khá nhiều trong phiên này. Nên kiểm tra lại độ cao ghế/màn hình và nghỉ giải lao thường xuyên hơn.', en:'Posture deviated quite a lot this session. Consider checking your chair/screen height and taking breaks more often.'},
+  repTimeHeader:{vi:'Thời điểm hay ngồi sai', en:'When posture tended to slip'},
+  repTimeNone:{vi:'Không có khoảng thời gian nào lệch tư thế đáng kể — rất tốt.', en:'No period had significant posture deviation — great job.'},
+  repSegment:{vi:'Phút', en:'Minute'},
+  repMostlyGood:{vi:'chủ yếu tốt', en:'mostly good'},
+  repTrendHeader:{vi:'Xu hướng sai tư thế', en:'Posture deviation trend'},
+  repTrendWorse:{vi:'Tư thế có xu hướng xấu dần về cuối phiên (có thể do mỏi mệt) — nên đứng dậy vận động giữa giờ.', en:'Posture tended to get worse toward the end of the session (possibly fatigue) — consider standing up to move around midway.'},
+  repTrendBetter:{vi:'Tư thế có xu hướng cải thiện dần về cuối phiên.', en:'Posture tended to improve toward the end of the session.'},
+  repTrendStable:{vi:'Tư thế khá ổn định trong suốt phiên, không có xu hướng xấu đi rõ rệt.', en:'Posture was fairly stable throughout the session, with no clear worsening trend.'},
+  repTopIssue:{vi:'Lỗi xuất hiện nhiều nhất', en:'Most frequent issue'},
+  repOutOf:{vi:'trên', en:'out of'},
+  repLogs:{vi:'lần ghi log', en:'log entries'},
   notifyTitle:{vi:'SmartPosture — Cảnh báo tư thế', en:'SmartPosture — Posture Alert'},
-  notifyBodyPrefix:{vi:'Bạn đang lệch tư thế:', en:'You are deviating from good posture:'}
+  notifyBodyPrefix:{vi:'Bạn đang lệch tư thế:', en:'You are deviating from good posture:'},
+  calibGuideTitle:{vi:'Chuẩn bị trước khi hiệu chuẩn', en:'Before you calibrate'},
+  calibGuideLead:{vi:'Làm theo checklist rồi ngồi ở tư thế bạn cho là chuẩn. Camera sẽ lấy mốc 5 giây.', en:'Follow the checklist, then sit in the posture you consider ideal. The camera takes a 5-second baseline.'},
+  calibStartNow:{vi:'Bắt đầu hiệu chuẩn (5s)', en:'Start calibration (5s)'},
+  calibCancel:{vi:'Hủy', en:'Cancel'},
+  earWarn:{vi:'Chưa thấy rõ hai tai — góc cổ/nghiêng đầu sẽ bị loại khỏi cảnh báo (thấp tin cậy).', en:'Ears not clearly visible — neck angle/head tilt are excluded from alerts (low confidence).'},
+  ckEye:{vi:'Camera ngang tầm mắt (không nhìn từ trên xuống)', en:'Camera at eye level (not looking down)'},
+  ckLight:{vi:'Đủ sáng, khuôn mặt không ngược sáng mạnh', en:'Good light, no strong backlight on your face'},
+  ckBody:{vi:'Nhìn thấy mặt và cả hai vai trong khung hình', en:'Face and both shoulders are in frame'},
+  ckSit:{vi:'Tôi đang ngồi đúng tư thế muốn lấy làm chuẩn', en:'I am sitting in the posture I want as baseline'},
+  h2History:{vi:'Lịch sử phiên', en:'Session history'},
+  clearHistBtn:{vi:'Xóa lịch sử', en:'Clear history'},
+  histEmpty:{vi:'Chưa có phiên nào được lưu trên máy này.', en:'No sessions saved on this device yet.'},
+  thDate:{vi:'Ngày', en:'Date'},
+  thVsPrev:{vi:'So với phiên trước', en:'vs previous session'},
+  printBtn:{vi:'In / lưu PDF', en:'Print / save PDF'},
+  h2Cush:{vi:'Đệm ghế cảm biến', en:'Sensor seat cushion'},
+  cushConnect:{vi:'Kết nối đệm (USB)', en:'Connect cushion (USB)'},
+  cushZero:{vi:'Đo nền đệm trống (5s)', en:'Measure empty baseline (5s)'},
+  h2Rec:{vi:'Ghi dữ liệu huấn luyện', en:'Record training data'},
+  recLabelPrefix:{vi:'Nhãn tư thế đang ngồi', en:'Posture label you are sitting in'},
+  recStart:{vi:'Bắt đầu ghi (sau 3s)', en:'Start recording (in 3s)'},
+  recStop:{vi:'Dừng ghi', en:'Stop recording'},
+  recExport:{vi:'Xuất CSV huấn luyện', en:'Export training CSV'}
 };
 const ISSUES = {
   headForward:{vi:'cúi đầu', en:'head forward'}, shoulderRound:{vi:'gù vai', en:'rounded shoulders'},
   neckBend:{vi:'gập cổ', en:'neck bend'}, shoulderTilt:{vi:'lệch vai', en:'shoulder tilt'},
-  headTilt:{vi:'nghiêng đầu', en:'head tilt'}, tooClose:{vi:'quá gần màn hình', en:'too close to screen'}
+  headTilt:{vi:'nghiêng đầu', en:'head tilt'}, tooClose:{vi:'quá gần màn hình', en:'too close to screen'},
+  leanSide:{vi:'nghiêng người sang một bên', en:'leaning to one side'}, leanFwd:{vi:'chồm người ra trước', en:'leaning forward'},
+  leanBack:{vi:'ngả/trượt ra sau', en:'slouching back'}, legCross:{vi:'vắt chéo chân / lệch đùi', en:'crossed legs / uneven thighs'}
 };
 const TOOLTIPS = {
   fhi:{vi:'FHI đo mức đầu đưa ra trước so với vai (khoảng cách miệng–vai). Thấp hơn ngưỡng nghĩa là bạn đang cúi đầu về phía trước.', en:'FHI measures how far your head juts forward relative to your shoulders. Below threshold means your head is leaning forward.'},
@@ -410,9 +588,9 @@ function smooth(lm){
   if (buf.length > SMOOTH_N) buf.shift();
   const out = [];
   for (let i=0;i<lm.length;i++){
-    let sx=0,sy=0,c=0;
-    for (const f of buf){ if(f[i]){ sx+=f[i].x; sy+=f[i].y; c++; } }
-    out[i] = c? {x:sx/c, y:sy/c} : lm[i];
+    let sx=0,sy=0,sv=0,c=0;
+    for (const f of buf){ if(f[i]){ sx+=f[i].x; sy+=f[i].y; sv+=(f[i].visibility===undefined?1:f[i].visibility); c++; } }
+    out[i] = c? {x:sx/c, y:sy/c, visibility:sv/c} : lm[i];
   }
   return out;
 }
@@ -423,7 +601,7 @@ let calibrating=false, calibSamples=[], calibrated=false;
 let baseline = { faceH:0, chinShoulder:0, shoulderW:0, neckAngle:0, shTilt:0, headTilt:0, ipd:0 };
 applyI18n();
 
-let badSince=null, alerts=0, sessionStart=null, goodMs=0, badMs=0, lastTick=null, currentIssueText='';
+let badSince=null, alerts=0, sessionStart=null, sessionEndedAt=null, goodMs=0, badMs=0, lastTick=null, currentIssueText='';
 let logRows = [];
 let audioCtx=null, alertInterval=null;
 function playAlertSequence(){
@@ -497,6 +675,183 @@ function drawTrend(){
 }
 window.addEventListener('resize', ()=>{ resizeTrendCanvas(); drawTrend(); });
 
+// ===== Đệm cảm biến (Web Serial, CSV 20 Hz từ ESP32: t_ms,ch1..ch6) =====
+const cs = (vi,en)=>currentLang==='vi'?vi:en;
+const CUSH_TH = {side:.15, fwd:.2, back:.2, leg:.2, sitRatio:.3}; // ngưỡng khởi đầu — chỉnh theo dữ liệu T2/T3
+const cush = {connected:false, raw:[0,0,0,0,0,0], zero:[0,0,0,0,0,0], last:0, base:null, cur:null, zeroing:false, zeroBuf:[], sitBuf:[]};
+const cushConnBtn=document.getElementById('cushConnBtn'), cushZeroBtn=document.getElementById('cushZeroBtn');
+const cushStatus=document.getElementById('cushStatus'), cushWarn=document.getElementById('cushWarn'), cushBars=document.getElementById('cushBars');
+const cushT=document.getElementById('cushT'), cushLR=document.getElementById('cushLR'), cushFB=document.getElementById('cushFB');
+for(let i=0;i<6;i++){ const b=document.createElement('div'); b.title='CH'+(i+1); b.style.cssText='flex:1;border-radius:4px;height:0%;background:var(--good);transition:height .1s'; cushBars.appendChild(b); }
+const mean6 = rows => [0,1,2,3,4,5].map(i=>rows.reduce((a,r)=>a+r[i],0)/rows.length);
+function cushSet(vi,en){ cushStatus.textContent = cs(vi,en); }
+function cushLive(){ return cush.connected && performance.now()-cush.last<1500; }
+function cushMetrics(raw){
+  const s = raw.map((v,i)=>Math.max(0, v-cush.zero[i]));
+  const T = s.reduce((a,b)=>a+b,0);
+  if(T<=0) return {s,T:0,lr:0,fb:0,th:0};
+  return {s, T, lr:(s[1]+s[4]-s[0]-s[3])/T, fb:(s[0]+s[1]+s[2]-s[3]-s[4]-s[5])/T, th:(s[1]-s[0])/T};
+}
+function cushRender(){
+  [...cushBars.children].forEach((b,i)=>{ b.style.height=(cush.raw[i]/4095*100)+'%'; b.style.background = cush.raw[i]>=4000?'var(--bad)':'var(--good)'; });
+  const m = cushMetrics(cush.raw);
+  cushT.textContent = Math.round(m.T); cushLR.textContent = m.lr.toFixed(2); cushFB.textContent = m.fb.toFixed(2);
+  cushWarn.textContent = cush.raw.some(v=>v>=4000) ? cs('Có kênh bão hoà (ADC ≥ 4000): giảm R_M hoặc phủ lớp đệm mềm hơn để lực lan ra.','A channel is saturated (ADC ≥ 4000): lower R_M or add a softer top layer to spread the load.') : '';
+}
+function cushParse(line){
+  const p = line.trim().split(',');
+  if(p.length!==7) return;
+  const v = p.slice(1).map(Number);
+  if(v.some(Number.isNaN)) return;
+  cush.raw = v; cush.last = performance.now();
+  if(cush.zeroing) cush.zeroBuf.push(v);
+  if(calibrating) cush.sitBuf.push(v);
+  cushRender();
+}
+async function cushConnect(){
+  if(!('serial' in navigator)){ cushSet('Trình duyệt không hỗ trợ Web Serial. Dùng Chrome/Edge và mở trang qua https hoặc localhost.','Web Serial is not supported. Use Chrome/Edge and open the page over https or localhost.'); return; }
+  try{
+    const port = await navigator.serial.requestPort();
+    await port.open({baudRate:115200});
+    cush.connected = true; cushConnBtn.disabled = true; cushZeroBtn.disabled = false;
+    cushSet('Đã kết nối đệm. Đo nền khi đệm trống, rồi hiệu chuẩn camera khi ngồi thẳng.','Cushion connected. Measure the empty baseline, then calibrate the camera while sitting upright.');
+    const dec = new TextDecoderStream(); port.readable.pipeTo(dec.writable).catch(()=>{});
+    const reader = dec.readable.getReader(); let carry = '';
+    for(;;){ const {value,done} = await reader.read(); if(done) break; carry += value; const lines = carry.split('\n'); carry = lines.pop(); lines.forEach(cushParse); }
+  }catch(e){ cushSet('Không kết nối được đệm: '+e.message,'Could not connect to the cushion: '+e.message); }
+  cush.connected = false; cushConnBtn.disabled = false; cushZeroBtn.disabled = true;
+}
+cushConnBtn.onclick = cushConnect;
+cushZeroBtn.onclick = () => {
+  cush.zeroing = true; cush.zeroBuf = []; cushZeroBtn.disabled = true;
+  cushSet('Đang đo nền — không ai ngồi lên đệm (5s)…','Measuring baseline — keep the cushion empty (5s)…');
+  setTimeout(()=>{
+    cush.zeroing = false; cushZeroBtn.disabled = !cush.connected;
+    if(cush.zeroBuf.length>=10){ cush.zero = mean6(cush.zeroBuf); cushSet('Đã lưu nền đệm trống. Ngồi thẳng rồi hiệu chuẩn camera.','Empty baseline saved. Sit upright and calibrate the camera.'); }
+    else cushSet('Chưa nhận đủ dữ liệu từ đệm, hãy thử lại.','Not enough data from the cushion, try again.');
+  },5000);
+};
+function cushCalibrate(){ cush.base = cush.sitBuf.length>=5 ? cushMetrics(mean6(cush.sitBuf)) : null; }
+function cushIssues(issues){
+  cush.cur = null;
+  if(!cushLive() || !cush.base) return;
+  const m = cushMetrics(cush.raw); cush.cur = m;
+  if(m.T < cush.base.T*CUSH_TH.sitRatio) return; // đệm báo không có người ngồi
+  const dLR=m.lr-cush.base.lr, dFB=m.fb-cush.base.fb, dTH=m.th-cush.base.th;
+  if(hy('leanSide', Math.abs(dLR)>CUSH_TH.side, Math.abs(dLR)<CUSH_TH.side*0.7)) issues.push('leanSide');
+  if(hy('leanFwd', dFB>CUSH_TH.fwd, dFB<CUSH_TH.fwd*0.7)) issues.push('leanFwd');
+  if(hy('leanBack', dFB<-CUSH_TH.back, dFB>-CUSH_TH.back*0.7)) issues.push('leanBack');
+  if(hy('legCross', Math.abs(dTH)>CUSH_TH.leg, Math.abs(dTH)<CUSH_TH.leg*0.7)) issues.push('legCross');
+}
+function cushLog(){
+  if(!cushLive()) return ',,,,,,,,';
+  const m = cush.cur || cushMetrics(cush.raw);
+  return [Math.round(m.T), m.lr.toFixed(3), m.fb.toFixed(3), ...cush.raw].join(',');
+}
+document.getElementById('printBtn').onclick = () => window.print();
+
+// ===== Tạm dừng =====
+let paused = false;
+function setPaused(v){
+  paused = v; pauseBtn.textContent = v ? cs('Tiếp tục','Resume') : tr('pauseBtn');
+  if(v){ lastTick=null; badSince=null; goodSince=null; stopAlertLoop(); camwrap.dataset.alerted=''; camwrap.classList.remove('warn','bad'); overlayLabel.textContent = cs('Đã tạm dừng','Paused'); }
+  else if(calibrated){ overlayLabel.textContent = tr('overlayDone'); }
+}
+pauseBtn.onclick = () => setPaused(!paused);
+endBtn.addEventListener('click', ()=>{ setPaused(false); pauseBtn.disabled = true; });
+resetBtn.addEventListener('click', ()=>{ setPaused(false); pauseBtn.disabled = true; });
+
+// ===== Ghi dữ liệu có nhãn (10 Hz: đặc trưng camera + 6 kênh đệm) =====
+let lastM = null, lastVisOk = false, lastMT = 0;
+const LABELS = [['upright','Ngồi thẳng','Upright'],['slouch','Gù lưng','Slouched'],['head_fwd','Cúi đầu ra trước','Head forward'],
+  ['lean_left','Nghiêng trái','Lean left'],['lean_right','Nghiêng phải','Lean right'],['perch','Ngồi mép ghế','Perched on edge'],
+  ['leg_cross','Vắt chéo chân','Legs crossed'],['lean_back','Ngả/trượt ra sau','Slouch back']];
+const REC_HEADER = 't_s,label,seg,cam_ok,fhi_ratio,rsi_ratio,neck_dev,shoulder_tilt_dev,head_tilt_dev,dist_ratio,raw_chin_shoulder,raw_shoulder_w,raw_ipd,raw_neck_angle,raw_head_tilt,raw_shoulder_tilt,cush_live,cush_T,cush_LR,cush_FB,ch1,ch2,ch3,ch4,ch5,ch6';
+const rec = {on:false, t0:0, seg:0, label:'', rows:[], counts:{}, timer:null, wait:null};
+const recLabel=document.getElementById('recLabel'), recStartBtn=document.getElementById('recStartBtn'), recStopBtn=document.getElementById('recStopBtn');
+const recExportBtn=document.getElementById('recExportBtn'), recStatus=document.getElementById('recStatus');
+function buildLabels(){
+  const cur = recLabel.value;
+  recLabel.innerHTML = LABELS.map(l=>`<option value="${l[0]}">${currentLang==='vi'?l[1]:l[2]}</option>`).join('');
+  if(cur) recLabel.value = cur;
+}
+buildLabels(); langToggle.addEventListener('click', buildLabels);
+const fx = v => (typeof v==='number' && isFinite(v)) ? v.toFixed(4) : '';
+function recStats(){
+  const parts = Object.entries(rec.counts).map(([k,n])=>`${k}: ${n}`).join(' | ');
+  recStatus.textContent = (rec.on ? cs('Đang ghi nhãn ','Recording label ')+rec.label+' — ' : '') + cs('Tổng ','Total ')+rec.rows.length+(parts?' ('+parts+')':'');
+}
+function recSample(){
+  if(paused) return;
+  const now = performance.now();
+  const m = (lastM && now-lastMT<500) ? lastM : null;
+  const camOk = !!(m && lastVisOk);
+  let ratio = ['','','','','',''];
+  if(camOk && calibrated){
+    ratio = [m.chinShoulder/baseline.chinShoulder, m.shoulderW/baseline.shoulderW,
+      (m.neckAngle!==null && baseline.neckAngle!==null) ? m.neckAngle-baseline.neckAngle : '',
+      m.shTilt-baseline.shTilt,
+      (m.headTilt!==null && baseline.headTilt!==null) ? m.headTilt-baseline.headTilt : '',
+      m.ipd/baseline.ipd];
+  }
+  const raw = m ? [m.chinShoulder,m.shoulderW,m.ipd,m.neckAngle,m.headTilt,m.shTilt] : ['','','','','',''];
+  const live = cushLive(), cm = live ? cushMetrics(cush.raw) : null;
+  rec.rows.push([((now-rec.t0)/1000).toFixed(2), rec.label, rec.seg, camOk?1:0, ...ratio.map(fx), ...raw.map(fx),
+    live?1:0, cm?Math.round(cm.T):'', cm?fx(cm.lr):'', cm?fx(cm.fb):'', ...(live?cush.raw:['','','','','',''])].join(','));
+  rec.counts[rec.label] = (rec.counts[rec.label]||0)+1;
+  if(rec.rows.length%10===0) recStats();
+}
+recStartBtn.onclick = () => {
+  if(rec.on || rec.wait) return;
+  rec.label = recLabel.value; recStartBtn.disabled = true; recLabel.disabled = true;
+  let cd = 3;
+  const warn = (cushLive()?'':cs(' Đệm chưa kết nối: cột đệm sẽ trống.',' Cushion not connected: cushion columns will be empty.')) + (calibrated?'':cs(' Camera chưa hiệu chuẩn: chỉ số chuẩn hoá sẽ trống (vẫn có dữ liệu thô).',' Camera not calibrated: normalised metrics will be empty (raw values are still recorded).'));
+  recStatus.textContent = cs('Vào tư thế… ','Get into posture… ')+cd+'s.'+warn;
+  rec.wait = setInterval(()=>{
+    cd--;
+    if(cd>0){ recStatus.textContent = cs('Vào tư thế… ','Get into posture… ')+cd+'s.'+warn; return; }
+    clearInterval(rec.wait); rec.wait = null;
+    rec.on = true; rec.seg++; rec.t0 = performance.now(); recStopBtn.disabled = false;
+    rec.timer = setInterval(recSample, 100); recStats();
+  },1000);
+};
+recStopBtn.onclick = () => {
+  clearInterval(rec.timer); rec.on = false; recStopBtn.disabled = true; recStartBtn.disabled = false; recLabel.disabled = false;
+  recExportBtn.disabled = rec.rows.length===0; recStats();
+};
+recExportBtn.onclick = () => {
+  const d = new Date(), z = n=>String(n).padStart(2,'0');
+  const name = `smartposture_train_${d.getFullYear()}${z(d.getMonth()+1)}${z(d.getDate())}-${z(d.getHours())}${z(d.getMinutes())}.csv`;
+  const url = URL.createObjectURL(new Blob([REC_HEADER+'\n'+rec.rows.join('\n')], {type:'text/csv;charset=utf-8;'}));
+  const a = document.createElement('a'); a.href = url; a.download = name;
+  document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url);
+};
+
+// ===== Độ tin cậy: visibility, hysteresis, chất lượng hiệu chuẩn =====
+const CORE_IDX = [0,2,5,9,10,11,12], VIS_MIN = 0.5, GOOD_RESET_MS = 2500;
+let visLost = false, goodSince = null, calibRejected = 0;
+const calibQuality = document.getElementById('calibQuality');
+const hState = {};
+function hy(key, enter, exit){ if(enter) hState[key]=true; else if(exit) hState[key]=false; return !!hState[key]; }
+function hReset(){ Object.keys(hState).forEach(k=>delete hState[k]); }
+function markLost(){
+  visLost = true; lastTick = null; badSince = null; goodSince = null;
+  stopAlertLoop(); camwrap.dataset.alerted = ''; camwrap.classList.remove('warn','bad');
+  overlayLabel.textContent = cs('Không thấy rõ bạn — kiểm tra ánh sáng và khung hình','Cannot see you clearly — check lighting and framing');
+}
+function calibQualityReport(){
+  const cv = k => { const v=calibSamples.map(x=>x[k]), mu=v.reduce((a,b)=>a+b,0)/v.length; return Math.sqrt(v.reduce((a,b)=>a+(b-mu)*(b-mu),0)/v.length)/mu; };
+  const spread = Math.max(cv('chinShoulder'), cv('shoulderW'), cv('ipd'));
+  const rej = calibRejected/(calibRejected+calibSamples.length);
+  let score = Math.round(Math.max(0, 100-spread/0.03*100)*(1-rej));
+  if(calibSamples.length<30) score = Math.min(score,49);
+  const lvl = score>=75?'good':score>=50?'warn':'bad';
+  const vi = {good:'ổn định.',warn:'tạm được, nên ngồi yên hơn.',bad:'chưa ổn định, hãy hiệu chuẩn lại.'}[lvl];
+  const en = {good:'stable.',warn:'acceptable, try to sit still.',bad:'unstable, please recalibrate.'}[lvl];
+  pauseBtn.disabled = false; calibQuality.className = 'status-banner '+lvl; calibQuality.style.display = 'block';
+  calibQuality.textContent = cs(`Chất lượng hiệu chuẩn: ${score}/100 — ${vi}`, `Calibration quality: ${score}/100 — ${en}`);
+}
+
 function metricsFrom(lm){
   const nose=lm[0], eyeL=lm[2], eyeR=lm[5], earL=lm[7], earR=lm[8], mouthL=lm[9], mouthR=lm[10], shL=lm[11], shR=lm[12];
   if(!nose||!eyeL||!eyeR||!mouthL||!mouthR||!shL||!shR) return null;
@@ -525,7 +880,7 @@ function onResults(results){
   canvasEl.width = videoEl.videoWidth || 640;
   canvasEl.height = videoEl.videoHeight || 480;
   ctx.clearRect(0,0,canvasEl.width,canvasEl.height);
-  if(!results.poseLandmarks) return;
+  if(!results.poseLandmarks){ if(calibrated && !calibrating) markLost(); return; }
   const smoothed = smooth(results.poseLandmarks);
 
   // draw tracked points
@@ -540,11 +895,17 @@ function onResults(results){
   const m = metricsFrom(smoothed);
   if(!m) return;
 
+  const visOk = Math.min(...CORE_IDX.map(i=>smoothed[i]?smoothed[i].visibility:0)) >= VIS_MIN;
+  lastM = m; lastVisOk = visOk; lastMT = performance.now();
+  const vv = i => smoothed[i] ? smoothed[i].visibility : 0;
+  lastVP = {face:Math.min(vv(0),vv(2),vv(5),vv(9),vv(10)), sh:Math.min(vv(11),vv(12)), ear:Math.min(vv(7),vv(8))};
   if(calibrating){
-    calibSamples.push(m);
+    if(visOk) calibSamples.push(m); else calibRejected++;
     return;
   }
   if(!calibrated) return;
+  if(!visOk){ markLost(); return; }
+  if(visLost){ visLost = false; overlayLabel.textContent = tr('overlayDone'); }
 
   const fhiRatio = m.chinShoulder / baseline.chinShoulder;
   const rsiRatio = m.shoulderW / baseline.shoulderW;
@@ -552,14 +913,14 @@ function onResults(results){
   animateNumber(rsiVal, rsiRatio*100, 0, '%', false);
 
   const issues = [];
-  if(fhiRatio < threshold) issues.push('headForward');
-  if(rsiRatio < threshold) issues.push('shoulderRound');
+  if(hy('headForward', fhiRatio<threshold, fhiRatio>threshold+0.05)) issues.push('headForward');
+  if(hy('shoulderRound', rsiRatio<threshold, rsiRatio>threshold+0.05)) issues.push('shoulderRound');
 
   // neck flexion angle vs baseline (degrees) — only when ears are reliably visible
   if(m.neckAngle!==null && baseline.neckAngle!==null){
     const neckDev = m.neckAngle - baseline.neckAngle;
     animateNumber(neckVal, neckDev, 1, '°', true);
-    const bad = neckDev>10;
+    const bad = hy('neckBend', neckDev>10, neckDev<7);
     neckVal.className = 'v '+(bad?'bad':'good'); neckIcon.className = 'micon '+(bad?'bad':'good');
     if(bad) issues.push('neckBend');
   } else { neckVal.textContent=tr('lowConfidence'); neckVal.className='v'; neckIcon.className='micon'; }
@@ -567,7 +928,7 @@ function onResults(results){
   // shoulder height asymmetry vs baseline
   const shDev = m.shTilt - baseline.shTilt;
   animateNumber(shTiltVal, shDev*100, 1, '%', true);
-  const shBad = shDev>0.06;
+  const shBad = hy('shoulderTilt', shDev>0.06, shDev<0.04);
   shTiltVal.className = 'v '+(shBad?'bad':'good'); shTiltIcon.className = 'micon '+(shBad?'bad':'good');
   if(shBad) issues.push('shoulderTilt');
 
@@ -575,28 +936,31 @@ function onResults(results){
   if(m.headTilt!==null && baseline.headTilt!==null){
     const headDev = m.headTilt - baseline.headTilt;
     animateNumber(headTiltVal, headDev*100, 1, '%', true);
-    const hBad = headDev>0.06;
+    const hBad = hy('headTilt', headDev>0.06, headDev<0.04);
     headTiltVal.className = 'v '+(hBad?'bad':'good'); headTiltIcon.className = 'micon '+(hBad?'bad':'good');
     if(hBad) issues.push('headTilt');
   } else { headTiltVal.textContent=tr('lowConfidence'); headTiltVal.className='v'; headTiltIcon.className='micon'; }
 
   const distRatio = m.ipd / baseline.ipd;
   animateNumber(screenDistVal, distRatio*100, 0, '%', false);
-  const distBad = distRatio>1.15;
+  const distBad = hy('tooClose', distRatio>1.15, distRatio<1.10);
   screenDistVal.className = 'v '+(distBad?'bad':'good'); screenDistIcon.className = 'micon '+(distBad?'bad':'good');
   if(distBad) issues.push('tooClose');
 
+  cushIssues(issues);
   const isBad = issues.length>0;
   const now = performance.now();
   if(lastTick===null) lastTick = now;
   const dt = now - lastTick; lastTick = now;
 
   if(isBad){
+    goodSince = null;
     if(badSince===null) badSince = now;
     badMs += dt;
   } else {
-    badSince = null;
     goodMs += dt;
+    if(goodSince===null) goodSince = now;
+    if(now-goodSince >= GOOD_RESET_MS) badSince = null;
   }
   const streakSec = badSince!==null ? (now-badSince)/1000 : 0;
   animateNumber(streakVal, streakSec, 1, 's', false);
@@ -620,8 +984,8 @@ function onResults(results){
   const gaugeText = level==='good' ? tr('gaugeGood') : level==='warn' ? tr('gaugeWarn') : tr('gaugeBad');
   setGauge(gaugeScore, level, gaugeText);
   gaugeSub.textContent = level==='good' ? tr('gaugeSubGood') : (issueTxt || tr('gaugeSubWaiting'));
-  fhiVal.className = 'v '+(fhiRatio<threshold?'bad':'good'); fhiIcon.className = 'micon '+(fhiRatio<threshold?'bad':'good');
-  rsiVal.className = 'v '+(rsiRatio<threshold?'bad':'good'); rsiIcon.className = 'micon '+(rsiRatio<threshold?'bad':'good');
+  const fB = issues.includes('headForward'); fhiVal.className = 'v '+(fB?'bad':'good'); fhiIcon.className = 'micon '+(fB?'bad':'good');
+  const rB = issues.includes('shoulderRound'); rsiVal.className = 'v '+(rB?'bad':'good'); rsiIcon.className = 'micon '+(rB?'bad':'good');
 
   if(level==='bad'){
     if(!camwrap.dataset.alerted){
@@ -631,7 +995,7 @@ function onResults(results){
       alertInterval = setInterval(fireAlert, 5000);
     }
   } else {
-    camwrap.dataset.alerted = '';
+    if(badSince===null) camwrap.dataset.alerted = '';
     stopAlertLoop();
   }
 
@@ -642,14 +1006,16 @@ function onResults(results){
   const nowBucket = Math.floor(now/5000);
   if(camwrap.dataset.lastLog !== String(nowBucket)){
     camwrap.dataset.lastLog = String(nowBucket);
-    const tstamp = sessionStart ? ((now-sessionStart)/1000).toFixed(0)+'s' : '0s';
+    const secNum = sessionStart ? Math.round((now-sessionStart)/1000) : 0;
+    const tstamp = secNum+'s';
     const levelTxt = level==='good'?tr('gaugeGood'):level==='warn'?tr('gaugeWarn'):tr('gaugeBad');
-    logRows.push({t:tstamp, fhi:Math.round(fhiRatio*100), rsi:Math.round(rsiRatio*100), status:level, issues:issueTxt});
+    logRows.push({t:tstamp, sec:secNum, fhi:Math.round(fhiRatio*100), rsi:Math.round(rsiRatio*100), status:level, issues:issueTxt, issueKeys:issues.slice(), cush:cushLog()});
     const rowEl = document.createElement('tr');
     rowEl.innerHTML = `<td>${tstamp}</td><td>${Math.round(fhiRatio*100)}</td><td>${Math.round(rsiRatio*100)}</td><td>${levelTxt}</td><td>${issueTxt}</td>`;
     logBody.prepend(rowEl);
     while(logBody.children.length>200) logBody.removeChild(logBody.lastChild);
     exportBtn.disabled = false;
+    reportBtn.disabled = false;
     drawTrend();
   }
 }
@@ -668,7 +1034,7 @@ async function startCamera(){
   camera = new Camera(videoEl, {
     onFrame: async () => {
       const t = performance.now();
-      if(t - lastSendTime < SEND_INTERVAL_MS) return;
+      if(paused || t - lastSendTime < SEND_INTERVAL_MS) return;
       lastSendTime = t;
       await pose.send({image: videoEl});
     },
@@ -681,7 +1047,7 @@ resizeTrendCanvas(); drawTrend();
 
 calibBtn.onclick = () => {
   requestNotifyPermission();
-  calibrating = true; calibSamples = []; calibrated = false;
+  calibrating = true; calibSamples = []; calibrated = false; cush.sitBuf = []; hReset(); calibRejected = 0;
   calibBtn.disabled = true;
   let cd = 5;
   overlayLabel.textContent = `${tr('overlayCountdown')} ${cd}s`;
@@ -699,8 +1065,9 @@ calibBtn.onclick = () => {
       const avgSafe = k => { const vals = calibSamples.map(x=>x[k]).filter(v=>v!==null&&v!==undefined); return vals.length? vals.reduce((a,b)=>a+b,0)/vals.length : null; };
       baseline = { faceH: avg('faceH'), chinShoulder: avg('chinShoulder'), shoulderW: avg('shoulderW'),
         ipd: avg('ipd'), neckAngle: avgSafe('neckAngle'), headTilt: avgSafe('headTilt'), shTilt: avg('shTilt') };
-      calibrated = true;
-      sessionStart = performance.now(); lastTick = null; goodMs=0; badMs=0; alerts=0; alertCount.textContent=0;
+      calibrated = true; cushCalibrate(); calibQualityReport();
+      sessionStart = performance.now(); sessionEndedAt = null; lastTick = null; goodMs=0; badMs=0; alerts=0; alertCount.textContent=0;
+      logRows=[]; logBody.innerHTML=''; exportBtn.disabled=true; reportBtn.disabled=true; endBtn.disabled=false; reportCard.style.display='none';
       overlayLabel.textContent = tr('overlayDone');
       statusBanner.className = 'status-banner good';
       statusBanner.textContent = tr('bannerGood');
@@ -713,10 +1080,72 @@ calibBtn.onclick = () => {
   }, 1000);
 };
 
+// ===== Hộp thoại checklist trước khi hiệu chuẩn =====
+let lastVP = null, calibChipTimer = null;
+const startCalibration = calibBtn.onclick;
+const calibModalEl = document.getElementById('calibModal'), calibStartEl = document.getElementById('calibStartNow'), calibCancelEl = document.getElementById('calibCancel');
+const CK_IDS = ['ckEye','ckLight','ckBody','ckSit'];
+function updateCalibChips(){
+  const fresh = lastVP && performance.now()-lastMT<700;
+  const set = (id,ok,vi,en)=>{ const el=document.getElementById(id); el.textContent=cs(vi,en); el.className='live-chip '+(ok?'ok':'bad'); };
+  const fOk = !!fresh && lastVP.face>=VIS_MIN, sOk = !!fresh && lastVP.sh>=VIS_MIN, eOk = !!fresh && lastVP.ear>=0.3;
+  set('chipFace',fOk,'Mặt','Face'); set('chipShoulders',sOk,'Hai vai','Both shoulders'); set('chipEars',eOk,'Hai tai','Both ears');
+  document.getElementById('earWarn').style.display = (fOk&&sOk&&!eOk) ? 'block' : 'none';
+  calibStartEl.disabled = !(CK_IDS.every(id=>document.getElementById(id).checked) && fOk && sOk);
+}
+function closeCalibModal(){ calibModalEl.classList.remove('show'); clearInterval(calibChipTimer); calibChipTimer = null; }
+calibBtn.onclick = () => {
+  CK_IDS.forEach(id=>{ document.getElementById(id).checked = false; });
+  calibModalEl.classList.add('show'); updateCalibChips();
+  calibChipTimer = setInterval(updateCalibChips, 300);
+};
+CK_IDS.forEach(id=>document.getElementById(id).addEventListener('change', updateCalibChips));
+calibStartEl.onclick = () => { closeCalibModal(); startCalibration(); };
+calibCancelEl.onclick = closeCalibModal;
+document.addEventListener('keydown', e=>{ if(e.key==='Escape' && calibModalEl.classList.contains('show')) closeCalibModal(); });
+
+// ===== Lịch sử phiên (localStorage, giữ 30 phiên gần nhất) =====
+const HIST_KEY = 'sp_history';
+const histBody = document.getElementById('histBody'), histEmpty = document.getElementById('histEmpty'), histCompare = document.getElementById('histCompare');
+function histLoad(){ try{ return JSON.parse(localStorage.getItem(HIST_KEY)||'[]'); }catch(e){ return []; } }
+function histSave(a){ try{ localStorage.setItem(HIST_KEY, JSON.stringify(a.slice(-30))); }catch(e){} }
+function saveSession(){
+  if(logRows.length<3 || !sessionStart) return;
+  const total = goodMs+badMs, cnt = {};
+  logRows.forEach(r=>(r.issueKeys||[]).forEach(k=>{ cnt[k]=(cnt[k]||0)+1; }));
+  const top = Object.entries(cnt).sort((a,b)=>b[1]-a[1])[0];
+  const a = histLoad();
+  a.push({ts:Date.now(), dur:Math.round(((sessionEndedAt||performance.now())-sessionStart)/1000), good:total>0?Math.round(goodMs/total*100):0, alerts, top:top?top[0]:null});
+  histSave(a); renderHistory();
+}
+function renderHistory(){
+  const a = histLoad(), rows = a.slice().reverse();
+  const fmt = new Intl.DateTimeFormat(currentLang==='vi'?'vi-VN':'en-GB', {dateStyle:'short', timeStyle:'short'});
+  histBody.innerHTML = rows.map((s,i)=>{
+    const prev = a[a.length-2-i], d = prev ? s.good-prev.good : null;
+    const dTxt = d===null ? '—' : `<span class="hist-delta ${d>=0?'up':'down'}">${d>=0?'+':''}${d} ${cs('điểm','pts')}</span>`;
+    return `<tr><td>${fmt.format(s.ts)}</td><td>${formatDuration(s.dur)}</td><td>${s.good}%</td><td>${dTxt}</td><td>${s.top&&ISSUES[s.top]?ti(s.top):''}</td></tr>`;
+  }).join('');
+  histEmpty.style.display = a.length ? 'none' : 'block';
+  if(a.length>=2){
+    const last = a[a.length-1], base = a.slice(Math.max(0,a.length-6),-1);
+    const d = last.good - Math.round(base.reduce((x,s)=>x+s.good,0)/base.length);
+    histCompare.textContent = cs(`Phiên gần nhất ${last.good}% tốt, ${d>=0?'cao hơn':'thấp hơn'} trung bình ${base.length} phiên trước ${Math.abs(d)} điểm.`,
+      `Latest session ${last.good}% good, ${Math.abs(d)} pts ${d>=0?'above':'below'} the average of the previous ${base.length}.`);
+  } else histCompare.textContent = '';
+}
+document.getElementById('clearHistBtn').onclick = () => {
+  if(confirm(cs('Xóa toàn bộ lịch sử phiên trên máy này?','Delete all session history on this device?'))){ histSave([]); renderHistory(); }
+};
+endBtn.addEventListener('click', ()=>setTimeout(saveSession,0));
+langToggle.addEventListener('click', renderHistory);
+renderHistory();
+
 resetBtn.onclick = () => {
   stopAlertLoop();
-  calibrated = false; badSince=null; alerts=0; goodMs=0; badMs=0; logRows=[];
-  logBody.innerHTML=''; exportBtn.disabled=true;
+  calibQuality.style.display='none'; hReset(); goodSince=null; visLost=false;
+  calibrated = false; badSince=null; alerts=0; goodMs=0; badMs=0; logRows=[]; sessionStart=null; sessionEndedAt=null;
+  logBody.innerHTML=''; exportBtn.disabled=true; reportBtn.disabled=true; endBtn.disabled=true; reportCard.style.display='none';
   camwrap.classList.remove('warn','bad');
   [fhiVal,rsiVal,neckVal,shTiltVal,headTiltVal,screenDistVal,streakVal,goodPct].forEach(el=>{ delete el.dataset.raw; });
   fhiVal.textContent='—'; rsiVal.textContent='—'; streakVal.textContent='0.0s';
@@ -732,8 +1161,8 @@ resetBtn.onclick = () => {
 };
 
 exportBtn.onclick = () => {
-  const header = 'time,fhi_percent,rsi_percent,status,issues\n';
-  const body = logRows.map(r=>`${r.t},${r.fhi},${r.rsi},${r.status},"${r.issues}"`).join('\n');
+  const header = 'time,fhi_percent,rsi_percent,status,issues,cushion_T,cushion_LR,cushion_FB,ch1,ch2,ch3,ch4,ch5,ch6\n';
+  const body = logRows.map(r=>`${r.t},${r.fhi},${r.rsi},${r.status},"${r.issues}",${r.cush||',,,,,,,,'}`).join('\n');
   const csv = header+body;
   const blob = new Blob([csv], {type:'text/csv;charset=utf-8;'});
   const url = URL.createObjectURL(blob);
@@ -743,9 +1172,139 @@ exportBtn.onclick = () => {
   URL.revokeObjectURL(url);
 };
 
+function formatDuration(sec){
+  const m = Math.floor(sec/60), s = Math.floor(sec%60);
+  return String(m).padStart(2,'0')+':'+String(s).padStart(2,'0');
+}
+function statusLabel(status){
+  return status==='good'?tr('gaugeGood'):status==='warn'?tr('gaugeWarn'):tr('gaugeBad');
+}
+function endSession(){
+  stopAlertLoop();
+  sessionEndedAt = performance.now();
+  calibrated = false;
+  badSince = null;
+  camwrap.classList.remove('warn','bad');
+  camwrap.dataset.alerted = '';
+  overlayLabel.textContent = tr('overlayEnded');
+  statusBanner.className = 'status-banner';
+  statusBanner.textContent = tr('bannerEnded');
+  setGauge(50,'',tr('overlayEnded'));
+  gaugeSub.textContent = tr('gaugeSubEnded');
+  endBtn.disabled = true;
+  reportBtn.disabled = logRows.length===0;
+  generateReport();
+}
+endBtn.onclick = endSession;
+
+function generateReport(){
+  if(logRows.length < 3){
+    reportBody.innerHTML = `<div class="report-text">${tr('reportNoData')}</div>`;
+    reportCard.style.display='block';
+    reportCard.scrollIntoView({behavior:'smooth', block:'nearest'});
+    return;
+  }
+  const rows = logRows.slice().reverse(); // oldest -> newest (logRows is newest-first)
+  const n = rows.length;
+  const badRows = rows.filter(r=>r.status!=='good');
+  const avgFhi = Math.round(rows.reduce((s,r)=>s+r.fhi,0)/n);
+  const avgRsi = Math.round(rows.reduce((s,r)=>s+r.rsi,0)/n);
+  const total = goodMs+badMs;
+  const goodPctVal = total>0 ? Math.round(goodMs/total*100) : Math.round((n-badRows.length)/n*100);
+  const durationSec = sessionStart ? Math.round(((sessionEndedAt||performance.now())-sessionStart)/1000) : (rows[n-1].sec||0);
+
+  // Tần suất lỗi
+  const issueCount = {};
+  rows.forEach(r=>(r.issueKeys||[]).forEach(k=>{ issueCount[k]=(issueCount[k]||0)+1; }));
+  const sortedIssues = Object.entries(issueCount).sort((a,b)=>b[1]-a[1]);
+
+  // Chia theo từng phút để tìm thời điểm hay sai
+  const totalSec = Math.max(...rows.map(r=>r.sec||0), 0);
+  const segLenSec = Math.max(60, Math.ceil(totalSec/6/30)*30); // ~phút, tối thiểu 60s, tối đa ~6 đoạn
+  const segments = [];
+  for(let startSec=0; startSec<=totalSec; startSec+=segLenSec){
+    const endSec = Math.min(startSec+segLenSec, totalSec);
+    const segRows = rows.filter(r=>r.sec>=startSec && r.sec<=endSec);
+    if(segRows.length===0) continue;
+    const segBad = segRows.filter(r=>r.status!=='good');
+    const badRatio = segBad.length/segRows.length;
+    const segIssueCount = {};
+    segBad.forEach(r=>(r.issueKeys||[]).forEach(k=>{ segIssueCount[k]=(segIssueCount[k]||0)+1; }));
+    const topSegIssue = Object.entries(segIssueCount).sort((a,b)=>b[1]-a[1])[0];
+    segments.push({startSec, endSec, badRatio, topIssue: topSegIssue?topSegIssue[0]:null});
+  }
+  const minToStr = s => Math.floor(s/60)+':'+String(s%60).padStart(2,'0');
+
+  // Xu hướng: nửa đầu vs nửa sau
+  const half = Math.floor(n/2);
+  const firstHalf = rows.slice(0, half), secondHalf = rows.slice(half);
+  const badRatioOf = arr => arr.length ? arr.filter(r=>r.status!=='good').length/arr.length : 0;
+  const r1 = badRatioOf(firstHalf), r2 = badRatioOf(secondHalf);
+  const diff = r2-r1;
+  let trendText;
+  if(diff > 0.15) trendText = tr('repTrendWorse');
+  else if(diff < -0.15) trendText = tr('repTrendBetter');
+  else trendText = tr('repTrendStable');
+
+  // Nhận xét tổng quan
+  const assessText = goodPctVal>=80 ? tr('repAssessGood') : goodPctVal>=50 ? tr('repAssessMed') : tr('repAssessBad');
+
+  const statsHtml = `<div class="report-stats">
+    <div class="report-stat"><span class="n">${formatDuration(durationSec)}</span><span class="l">${tr('repDuration')}</span></div>
+    <div class="report-stat"><span class="n">${goodPctVal}%</span><span class="l">${tr('repGoodPct')}</span></div>
+    <div class="report-stat"><span class="n">${avgFhi}%</span><span class="l">${tr('repAvgFhi')}</span></div>
+    <div class="report-stat"><span class="n">${avgRsi}%</span><span class="l">${tr('repAvgRsi')}</span></div>
+    <div class="report-stat"><span class="n">${alerts}</span><span class="l">${tr('repAlerts')}</span></div>
+  </div>`;
+
+  const segBad = segments.filter(s=>s.badRatio>0.25);
+  const timeHtml = segBad.length===0
+    ? `<div class="report-text">${tr('repTimeNone')}</div>`
+    : `<ul class="report-list">${segBad.map(s=>
+        `<li>${tr('repSegment')} ${minToStr(s.startSec)}–${minToStr(s.endSec)}: ${Math.round(s.badRatio*100)}% ${level2word(s.badRatio)}${s.topIssue?' — '+ti(s.topIssue):''}</li>`
+      ).join('')}</ul>`;
+
+  function level2word(ratio){ return currentLang==='vi' ? 'lệch tư thế' : 'posture deviation'; }
+
+  const topIssueHtml = sortedIssues.length ? `<div class="report-text" style="margin-top:10px">${tr('repTopIssue')}: <b>${ti(sortedIssues[0][0])}</b> (${sortedIssues[0][1]} ${tr('repOutOf')} ${n} ${tr('repLogs')})</div>` : '';
+
+  const logRowsHtml = rows.length
+    ? rows.map(r=>`<tr><td>${r.t}</td><td>${r.fhi}</td><td>${r.rsi}</td><td>${statusLabel(r.status)}</td><td>${r.issues||''}</td></tr>`).join('')
+    : `<tr><td colspan="5">${tr('repLogEmpty')}</td></tr>`;
+
+  reportBody.innerHTML = `
+    <div class="report-section">
+      <div class="report-h">${tr('repOverview')}</div>
+      ${statsHtml}
+      <div class="report-text" style="margin-top:12px">${assessText}</div>
+    </div>
+    <div class="report-section">
+      <div class="report-h">${tr('repTimeHeader')}</div>
+      ${timeHtml}
+    </div>
+    <div class="report-section">
+      <div class="report-h">${tr('repTrendHeader')}</div>
+      <div class="report-text">${trendText}</div>
+      ${topIssueHtml}
+    </div>
+    <div class="report-section">
+      <div class="report-h">${tr('repLogHeader')}</div>
+      <div class="logbox">
+        <table>
+          <thead><tr><th>${tr('thTime')}</th><th>FHI%</th><th>RSI%</th><th>${tr('thStatus')}</th><th>${tr('thIssues')}</th></tr></thead>
+          <tbody>${logRowsHtml}</tbody>
+        </table>
+      </div>
+    </div>
+  `;
+  reportCard.style.display='block';
+  reportCard.scrollIntoView({behavior:'smooth', block:'nearest'});
+}
+reportBtn.onclick = generateReport;
+
 setInterval(()=>{
   if(!sessionStart){ sessionClock.textContent='00:00'; return; }
-  const s = Math.floor((performance.now()-sessionStart)/1000);
+  const s = Math.floor(((sessionEndedAt||performance.now())-sessionStart)/1000);
   const m = String(Math.floor(s/60)).padStart(2,'0'), ss = String(s%60).padStart(2,'0');
   sessionClock.textContent = `${m}:${ss}`;
 }, 500);
