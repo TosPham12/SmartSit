@@ -28,7 +28,7 @@
 html{scroll-padding-top:env(safe-area-inset-top,0px)}
 body{margin:0;background:var(--bg);color:var(--text);font-family:var(--font);min-height:100%;-webkit-font-smoothing:antialiased;transition:background-color .3s,color .3s}
 .wrap{max-width:1100px;margin:0 auto;padding:32px 20px 64px;opacity:0;transform:translateY(8px);transition:opacity .6s ease,transform .6s ease}
-.wrap.loaded{opacity:1;transform:translateY(0)}
+.wrap.loaded{opacity:1;transform:none}
 header{display:flex;align-items:center;justify-content:space-between;gap:16px;padding-bottom:20px;margin-bottom:26px;flex-wrap:wrap}
 .brand{display:flex;align-items:center;gap:10px}
 .brand .dot{width:8px;height:8px;border-radius:50%;background:var(--accent)}
@@ -137,6 +137,8 @@ input[type=range]{width:100%;accent-color:var(--link);margin-top:8px}
 .btn-xs{padding:7px 12px;font-size:12px;box-shadow:none}
 .camwrap.paused{border-color:var(--link)}
 @media print{
+  :root,:root[data-theme="dark"],:root[data-theme="light"]{--bg:#fff;--panel:#fff;--panel2:#fafafa;--line:#ddd;--line2:#ccc;--text:#111;--dim:#555}
+  *,*::before,*::after{transition:none !important;animation:none !important;-webkit-print-color-adjust:exact;print-color-adjust:exact}
   .loading-screen,.no-print,header .headerbtns,.btnrow,label.range,.note,.camwrap,.status-banner,.gaugecard,canvas,#trendCanvas,.legend,#tooltipPopup,.modal-backdrop{display:none !important}
   body{background:#fff;color:#111}
   .wrap{opacity:1;transform:none;max-width:none;padding:0}
@@ -840,16 +842,35 @@ function markLost(){
   overlayLabel.textContent = cs('Không thấy rõ bạn — kiểm tra ánh sáng và khung hình','Cannot see you clearly — check lighting and framing');
 }
 function calibQualityReport(){
-  const cv = k => { const v=calibSamples.map(x=>x[k]), mu=v.reduce((a,b)=>a+b,0)/v.length; return Math.sqrt(v.reduce((a,b)=>a+(b-mu)*(b-mu),0)/v.length)/mu; };
-  const spread = Math.max(cv('chinShoulder'), cv('shoulderW'), cv('ipd'));
+  // Đánh giá độ dao động của từng chỉ số so với khoảng cách tới ngưỡng cảnh báo của chính nó (bỏ 5% giá trị ở mỗi đầu để loại nhiễu đột xuất)
+  const stat = a => { const v=[...a].sort((x,y)=>x-y), k=Math.floor(v.length*0.05), c=v.slice(k,v.length-k), mu=c.reduce((p,q)=>p+q,0)/c.length; return {mu, sd:Math.sqrt(c.reduce((p,q)=>p+(q-mu)*(q-mu),0)/c.length)}; };
+  const M = 1-threshold;
+  const defs = [['chinShoulder',true,M,'khoảng cách miệng–vai (FHI)','mouth–shoulder distance (FHI)'],
+    ['shoulderW',true,M,'độ rộng vai (RSI)','shoulder width (RSI)'],
+    ['ipd',true,0.15,'khoảng cách hai mắt (độ gần màn hình)','eye distance (screen distance)'],
+    ['neckAngle',false,10,'góc cổ','neck angle'],
+    ['shTilt',false,0.06,'độ lệch vai','shoulder tilt'],
+    ['headTilt',false,0.06,'nghiêng đầu','head tilt']];
+  let worst = {f:0, d:null};
+  defs.forEach(d=>{
+    const vals = calibSamples.map(x=>x[d[0]]).filter(v=>v!==null && v!==undefined && isFinite(v));
+    if(vals.length<5) return;
+    const {mu,sd} = stat(vals);
+    const f = (d[1] ? sd/Math.abs(mu||1) : sd) / d[2];
+    if(f>worst.f) worst = {f, d};
+  });
   const rej = calibRejected/(calibRejected+calibSamples.length);
-  let score = Math.round(Math.max(0, 100-spread/0.03*100)*(1-rej));
-  if(calibSamples.length<30) score = Math.min(score,49);
+  let score = Math.round(100*Math.max(0, 1-worst.f/0.8)*(1-rej));
+  const few = calibSamples.length<30;
+  if(few) score = Math.min(score,49);
   const lvl = score>=75?'good':score>=50?'warn':'bad';
   const vi = {good:'ổn định.',warn:'tạm được, nên ngồi yên hơn.',bad:'chưa ổn định, hãy hiệu chuẩn lại.'}[lvl];
   const en = {good:'stable.',warn:'acceptable, try to sit still.',bad:'unstable, please recalibrate.'}[lvl];
+  let extraVi = '', extraEn = '';
+  if(few){ extraVi = ` Chỉ thu được ${calibSamples.length} khung hình hợp lệ, hãy kiểm tra ánh sáng và khung hình.`; extraEn = ` Only ${calibSamples.length} valid frames were captured, check lighting and framing.`; }
+  else if(lvl!=='good' && worst.d){ extraVi = ` Dao động nhiều nhất ở: ${worst.d[3]}.`; extraEn = ` Largest fluctuation: ${worst.d[4]}.`; }
   pauseBtn.disabled = false; calibQuality.className = 'status-banner '+lvl; calibQuality.style.display = 'block';
-  calibQuality.textContent = cs(`Chất lượng hiệu chuẩn: ${score}/100 — ${vi}`, `Calibration quality: ${score}/100 — ${en}`);
+  calibQuality.textContent = cs(`Chất lượng hiệu chuẩn: ${score}/100 — ${vi}${extraVi}`, `Calibration quality: ${score}/100 — ${en}${extraEn}`);
 }
 
 function metricsFrom(lm){
@@ -1084,6 +1105,7 @@ calibBtn.onclick = () => {
 let lastVP = null, calibChipTimer = null;
 const startCalibration = calibBtn.onclick;
 const calibModalEl = document.getElementById('calibModal'), calibStartEl = document.getElementById('calibStartNow'), calibCancelEl = document.getElementById('calibCancel');
+document.body.appendChild(calibModalEl); // đưa ra ngoài .wrap để luôn căn giữa theo khung nhìn
 const CK_IDS = ['ckEye','ckLight','ckBody','ckSit'];
 function updateCalibChips(){
   const fresh = lastVP && performance.now()-lastMT<700;
