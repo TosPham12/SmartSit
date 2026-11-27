@@ -245,9 +245,11 @@ input[type=range]{width:100%;accent-color:var(--link);margin-top:8px}
       </div>
       <div class="note" id="cushStatus"></div>
       <div class="note" id="cushWarn" style="color:var(--bad)"></div>
-      <div id="cushBars" style="display:flex;gap:6px;height:56px;align-items:flex-end;margin:10px 0"></div>
+      <div id="cushBars" style="display:flex;gap:6px;height:56px;align-items:flex-end;margin:10px 0 4px"></div>
+      <div id="cushBarLabels" style="display:flex;gap:6px;font-size:11px;color:var(--dim);text-align:center;margin-bottom:8px"></div>
       <div class="rowline"><span class="k">Tổng tải T</span><span class="v" id="cushT">—</span></div>
-      <div class="rowline"><span class="k">Trái–phải LR</span><span class="v" id="cushLR">—</span></div>
+      <div class="rowline"><span class="k">Mông trái–phải</span><span class="v" id="cushBLR">—</span></div>
+      <div class="rowline"><span class="k">Đùi trái–phải</span><span class="v" id="cushTLR">—</span></div>
       <div class="rowline"><span class="k">Trước–sau FB</span><span class="v" id="cushFB">—</span></div>
     </div>
     <div class="card" style="margin-top:14px">
@@ -677,34 +679,47 @@ function drawTrend(){
 }
 window.addEventListener('resize', ()=>{ resizeTrendCanvas(); drawTrend(); });
 
-// ===== Đệm cảm biến (Web Serial, CSV 20 Hz từ ESP32: t_ms,ch1..ch6) =====
+// ===== Đệm cảm biến 4 FSR (Web Serial; ESP32-C6: t_ms,FSR1..FSR4, 10 Hz, 115200 baud, ADC thô 12 bit) =====
 const cs = (vi,en)=>currentLang==='vi'?vi:en;
-const CUSH_TH = {side:.15, fwd:.2, back:.2, leg:.2, sitRatio:.3}; // ngưỡng khởi đầu — chỉnh theo dữ liệu T2/T3
-const cush = {connected:false, raw:[0,0,0,0,0,0], zero:[0,0,0,0,0,0], last:0, base:null, cur:null, zeroing:false, zeroBuf:[], sitBuf:[]};
+// Cấu hình kênh: thứ tự = thứ tự cột trong dòng dữ liệu. Trái/phải tính theo người ngồi (theo tài liệu của nhóm làm đệm).
+const CUSH_CH = [
+  {key:'lb', vi:'Mông trái', en:'Left buttock'},
+  {key:'rb', vi:'Mông phải', en:'Right buttock'},
+  {key:'rt', vi:'Đùi phải',  en:'Right thigh'},
+  {key:'lt', vi:'Đùi trái',  en:'Left thigh'}
+];
+const CUSH_N = CUSH_CH.length, CI = Object.fromEntries(CUSH_CH.map((c,i)=>[c.key,i]));
+const CUSH_TH = {side:.12, fwd:.25, back:.25, leg:.3, sitRatio:.3}; // ngưỡng khởi đầu từ các khoảng giá trị nhóm cung cấp — chỉnh theo bộ dữ liệu thật
+const zeros = () => Array(CUSH_N).fill(0);
+const cush = {connected:false, raw:zeros(), zero:zeros(), last:0, base:null, cur:null, zeroing:false, zeroBuf:[], sitBuf:[]};
 const cushConnBtn=document.getElementById('cushConnBtn'), cushZeroBtn=document.getElementById('cushZeroBtn');
-const cushStatus=document.getElementById('cushStatus'), cushWarn=document.getElementById('cushWarn'), cushBars=document.getElementById('cushBars');
-const cushT=document.getElementById('cushT'), cushLR=document.getElementById('cushLR'), cushFB=document.getElementById('cushFB');
-for(let i=0;i<6;i++){ const b=document.createElement('div'); b.title='CH'+(i+1); b.style.cssText='flex:1;border-radius:4px;height:0%;background:var(--good);transition:height .1s'; cushBars.appendChild(b); }
-const mean6 = rows => [0,1,2,3,4,5].map(i=>rows.reduce((a,r)=>a+r[i],0)/rows.length);
+const cushStatus=document.getElementById('cushStatus'), cushWarn=document.getElementById('cushWarn'), cushBars=document.getElementById('cushBars'), cushBarLabels=document.getElementById('cushBarLabels');
+const cushT=document.getElementById('cushT'), cushBLR=document.getElementById('cushBLR'), cushTLR=document.getElementById('cushTLR'), cushFB=document.getElementById('cushFB');
+for(let i=0;i<CUSH_N;i++){ const b=document.createElement('div'); b.style.cssText='flex:1;border-radius:4px;height:0%;background:var(--good);transition:height .1s'; cushBars.appendChild(b); const l=document.createElement('span'); l.style.flex='1'; cushBarLabels.appendChild(l); }
+function cushLabels(){ [...cushBarLabels.children].forEach((l,i)=>{ l.textContent = cs(CUSH_CH[i].vi, CUSH_CH[i].en); }); [...cushBars.children].forEach((b,i)=>{ b.title = cs(CUSH_CH[i].vi, CUSH_CH[i].en); }); }
+cushLabels(); langToggle.addEventListener('click', cushLabels);
+const meanN = rows => Array.from({length:CUSH_N}, (_,i)=>rows.reduce((a,r)=>a+r[i],0)/rows.length);
 function cushSet(vi,en){ cushStatus.textContent = cs(vi,en); }
 function cushLive(){ return cush.connected && performance.now()-cush.last<1500; }
 function cushMetrics(raw){
   const s = raw.map((v,i)=>Math.max(0, v-cush.zero[i]));
-  const T = s.reduce((a,b)=>a+b,0);
-  if(T<=0) return {s,T:0,lr:0,fb:0,th:0};
-  return {s, T, lr:(s[1]+s[4]-s[0]-s[3])/T, fb:(s[0]+s[1]+s[2]-s[3]-s[4]-s[5])/T, th:(s[1]-s[0])/T};
+  const lb=s[CI.lb], rb=s[CI.rb], rt=s[CI.rt], lt=s[CI.lt], T=lb+rb+rt+lt;
+  const asym = (a,b) => (a+b)>0 ? (a-b)/(a+b) : 0;      // (a−b)/(a+b), dương = nghiêng về phía a
+  return {s, T, blr:asym(rb,lb), tlr:asym(rt,lt), fb:T>0 ? (rt+lt-lb-rb)/T : 0};
 }
 function cushRender(){
   [...cushBars.children].forEach((b,i)=>{ b.style.height=(cush.raw[i]/4095*100)+'%'; b.style.background = cush.raw[i]>=4000?'var(--bad)':'var(--good)'; });
   const m = cushMetrics(cush.raw);
-  cushT.textContent = Math.round(m.T); cushLR.textContent = m.lr.toFixed(2); cushFB.textContent = m.fb.toFixed(2);
+  cushT.textContent = Math.round(m.T); cushBLR.textContent = m.blr.toFixed(2); cushTLR.textContent = m.tlr.toFixed(2); cushFB.textContent = m.fb.toFixed(2);
   cushWarn.textContent = cush.raw.some(v=>v>=4000) ? cs('Có kênh bão hoà (ADC ≥ 4000): giảm R_M hoặc phủ lớp đệm mềm hơn để lực lan ra.','A channel is saturated (ADC ≥ 4000): lower R_M or add a softer top layer to spread the load.') : '';
 }
 function cushParse(line){
   const p = line.trim().split(',');
-  if(p.length!==7) return;
-  const v = p.slice(1).map(Number);
-  if(v.some(Number.isNaN)) return;
+  let v;
+  if(p.length===CUSH_N+1) v = p.slice(1).map(Number);      // t_ms,FSR1..FSR4
+  else if(p.length===CUSH_N) v = p.map(Number);            // chỉ có các kênh
+  else return;
+  if(v.some(Number.isNaN)) return;                          // dòng tiêu đề bị bỏ qua ở đây
   cush.raw = v; cush.last = performance.now();
   if(cush.zeroing) cush.zeroBuf.push(v);
   if(calibrating) cush.sitBuf.push(v);
@@ -729,26 +744,26 @@ cushZeroBtn.onclick = () => {
   cushSet('Đang đo nền — không ai ngồi lên đệm (5s)…','Measuring baseline — keep the cushion empty (5s)…');
   setTimeout(()=>{
     cush.zeroing = false; cushZeroBtn.disabled = !cush.connected;
-    if(cush.zeroBuf.length>=10){ cush.zero = mean6(cush.zeroBuf); cushSet('Đã lưu nền đệm trống. Ngồi thẳng rồi hiệu chuẩn camera.','Empty baseline saved. Sit upright and calibrate the camera.'); }
+    if(cush.zeroBuf.length>=10){ cush.zero = meanN(cush.zeroBuf); cushSet('Đã lưu nền đệm trống. Ngồi thẳng rồi hiệu chuẩn camera.','Empty baseline saved. Sit upright and calibrate the camera.'); }
     else cushSet('Chưa nhận đủ dữ liệu từ đệm, hãy thử lại.','Not enough data from the cushion, try again.');
   },5000);
 };
-function cushCalibrate(){ cush.base = cush.sitBuf.length>=5 ? cushMetrics(mean6(cush.sitBuf)) : null; }
+function cushCalibrate(){ cush.base = cush.sitBuf.length>=5 ? cushMetrics(meanN(cush.sitBuf)) : null; }
 function cushIssues(issues){
   cush.cur = null;
   if(!cushLive() || !cush.base) return;
   const m = cushMetrics(cush.raw); cush.cur = m;
   if(m.T < cush.base.T*CUSH_TH.sitRatio) return; // đệm báo không có người ngồi
-  const dLR=m.lr-cush.base.lr, dFB=m.fb-cush.base.fb, dTH=m.th-cush.base.th;
-  if(hy('leanSide', Math.abs(dLR)>CUSH_TH.side, Math.abs(dLR)<CUSH_TH.side*0.7)) issues.push('leanSide');
-  if(hy('leanFwd', dFB>CUSH_TH.fwd, dFB<CUSH_TH.fwd*0.7)) issues.push('leanFwd');
-  if(hy('leanBack', dFB<-CUSH_TH.back, dFB>-CUSH_TH.back*0.7)) issues.push('leanBack');
-  if(hy('legCross', Math.abs(dTH)>CUSH_TH.leg, Math.abs(dTH)<CUSH_TH.leg*0.7)) issues.push('legCross');
+  const dB=m.blr-cush.base.blr, dT=m.tlr-cush.base.tlr, dF=m.fb-cush.base.fb;
+  if(hy('leanSide', Math.abs(dB)>CUSH_TH.side, Math.abs(dB)<CUSH_TH.side*0.7)) issues.push('leanSide');
+  if(hy('leanFwd', dF>CUSH_TH.fwd, dF<CUSH_TH.fwd*0.7)) issues.push('leanFwd');
+  if(hy('leanBack', dF<-CUSH_TH.back, dF>-CUSH_TH.back*0.7)) issues.push('leanBack');
+  if(hy('legCross', Math.abs(dT)>CUSH_TH.leg, Math.abs(dT)<CUSH_TH.leg*0.7)) issues.push('legCross');
 }
 function cushLog(){
-  if(!cushLive()) return ',,,,,,,,';
+  if(!cushLive()) return ',,,,,,,';
   const m = cush.cur || cushMetrics(cush.raw);
-  return [Math.round(m.T), m.lr.toFixed(3), m.fb.toFixed(3), ...cush.raw].join(',');
+  return [Math.round(m.T), m.blr.toFixed(3), m.tlr.toFixed(3), m.fb.toFixed(3), ...cush.raw].join(',');
 }
 document.getElementById('printBtn').onclick = () => window.print();
 
@@ -768,7 +783,7 @@ let lastM = null, lastVisOk = false, lastMT = 0;
 const LABELS = [['upright','Ngồi thẳng','Upright'],['slouch','Gù lưng','Slouched'],['head_fwd','Cúi đầu ra trước','Head forward'],
   ['lean_left','Nghiêng trái','Lean left'],['lean_right','Nghiêng phải','Lean right'],['perch','Ngồi mép ghế','Perched on edge'],
   ['leg_cross','Vắt chéo chân','Legs crossed'],['lean_back','Ngả/trượt ra sau','Slouch back']];
-const REC_HEADER = 't_s,label,seg,cam_ok,fhi_ratio,rsi_ratio,neck_dev,shoulder_tilt_dev,head_tilt_dev,dist_ratio,raw_chin_shoulder,raw_shoulder_w,raw_ipd,raw_neck_angle,raw_head_tilt,raw_shoulder_tilt,cush_live,cush_T,cush_LR,cush_FB,ch1,ch2,ch3,ch4,ch5,ch6';
+const REC_HEADER = 't_s,label,seg,cam_ok,fhi_ratio,rsi_ratio,neck_dev,shoulder_tilt_dev,head_tilt_dev,dist_ratio,raw_chin_shoulder,raw_shoulder_w,raw_ipd,raw_neck_angle,raw_head_tilt,raw_shoulder_tilt,cush_live,cush_T,cush_bLR,cush_tLR,cush_FB,ch1,ch2,ch3,ch4';
 const rec = {on:false, t0:0, seg:0, label:'', rows:[], counts:{}, timer:null, wait:null};
 const recLabel=document.getElementById('recLabel'), recStartBtn=document.getElementById('recStartBtn'), recStopBtn=document.getElementById('recStopBtn');
 const recExportBtn=document.getElementById('recExportBtn'), recStatus=document.getElementById('recStatus');
@@ -799,7 +814,7 @@ function recSample(){
   const raw = m ? [m.chinShoulder,m.shoulderW,m.ipd,m.neckAngle,m.headTilt,m.shTilt] : ['','','','','',''];
   const live = cushLive(), cm = live ? cushMetrics(cush.raw) : null;
   rec.rows.push([((now-rec.t0)/1000).toFixed(2), rec.label, rec.seg, camOk?1:0, ...ratio.map(fx), ...raw.map(fx),
-    live?1:0, cm?Math.round(cm.T):'', cm?fx(cm.lr):'', cm?fx(cm.fb):'', ...(live?cush.raw:['','','','','',''])].join(','));
+    live?1:0, cm?Math.round(cm.T):'', cm?fx(cm.blr):'', cm?fx(cm.tlr):'', cm?fx(cm.fb):'', ...(live?cush.raw:Array(CUSH_N).fill(''))].join(','));
   rec.counts[rec.label] = (rec.counts[rec.label]||0)+1;
   if(rec.rows.length%10===0) recStats();
 }
@@ -1183,8 +1198,8 @@ resetBtn.onclick = () => {
 };
 
 exportBtn.onclick = () => {
-  const header = 'time,fhi_percent,rsi_percent,status,issues,cushion_T,cushion_LR,cushion_FB,ch1,ch2,ch3,ch4,ch5,ch6\n';
-  const body = logRows.map(r=>`${r.t},${r.fhi},${r.rsi},${r.status},"${r.issues}",${r.cush||',,,,,,,,'}`).join('\n');
+  const header = 'time,fhi_percent,rsi_percent,status,issues,cushion_T,cushion_bLR,cushion_tLR,cushion_FB,ch1,ch2,ch3,ch4\n';
+  const body = logRows.map(r=>`${r.t},${r.fhi},${r.rsi},${r.status},"${r.issues}",${r.cush||',,,,,,,'}`).join('\n');
   const csv = header+body;
   const blob = new Blob([csv], {type:'text/csv;charset=utf-8;'});
   const url = URL.createObjectURL(blob);
